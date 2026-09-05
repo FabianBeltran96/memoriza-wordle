@@ -5,10 +5,12 @@ import { useSpacedRepetition } from './composables/useSpacedRepetition.js'
 import StudyCard from './components/StudyCard.vue'
 import ProgressPanel from './components/ProgressPanel.vue'
 import ExplorerPanel from './components/ExplorerPanel.vue'
+import SolverPanel from './components/SolverPanel.vue'
 
 const TABS = [
   { id: 'estudiar', label: 'Estudiar' },
   { id: 'progreso', label: 'Progreso' },
+  { id: 'resolver', label: 'Resolver' },
   { id: 'explorar', label: 'Explorar' },
 ]
 
@@ -136,6 +138,8 @@ const totalWords = ALL_WORDS.length
         :hardest-words="hardestWords"
         @reset="onReset"
       />
+
+      <SolverPanel v-else-if="tab === 'resolver'" />
 
       <ExplorerPanel v-else :box-of="boxOf" />
     </div>
