@@ -1,0 +1,96 @@
+/* Tokens de diseño compartidos por todos los componentes.
+   Van en un archivo global porque los <style scoped> no comparten variables. */
+:root {
+  --bg: #e6e3d8;
+  --card: #fbfaf6;
+  --ink: #1b1f1c;
+  --muted: #6b7269;
+  --line: #c3bfae;
+  --track: #d8d4c6;
+
+  --blue: #28456b;
+  --moss: #40734b;
+  --plum: #7a4064;
+  --amber: #b4842a;
+
+  --mono: 'Courier New', ui-monospace, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Botones compartidos: se usan en varios componentes, por eso no son scoped. */
+.btn {
+  border: none;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: transform 0.06s ease, opacity 0.15s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.965);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.btn--go {
+  background: var(--moss);
+  color: #fff;
+}
+
+.btn--go:disabled {
+  background: var(--line);
+}
+
+.btn--dark {
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 22px;
+  margin-top: 10px;
+}
+
+.btn--ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 9px 14px;
+}
+
+.btn--danger {
+  background: transparent;
+  border: 1px solid var(--plum);
+  color: var(--plum);
+  font-size: 12px;
+  padding: 8px 14px;
+}
+
+/* Contenedores con scroll propio. */
+.scrollable {
+  overflow-y: auto;
+}
+
+.scrollable::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollable::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
