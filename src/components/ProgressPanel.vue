@@ -6,6 +6,7 @@ defineProps({
   masteredCount: { type: Number, required: true },
   startedCount: { type: Number, required: true },
   accuracy: { type: Number, required: true },
+  dayStreak: { type: Number, default: 0 },
   boxCounts: { type: Array, required: true },
   hardestWords: { type: Array, required: true },
 })
@@ -14,9 +15,11 @@ const emit = defineEmits(['reset'])
 
 const total = ALL_WORDS.length
 
+// Deben describir BOX_INTERVALS. La caja 0 junta las que nunca viste con las
+// que fallaste: ambas vuelven a salir de inmediato.
 const BOX_LABELS = [
-  'Sin ver todavía',
-  'Vista una vez',
+  'Sin ver o falladas',
+  'Repaso en 10 minutos',
   'Repaso en 1 día',
   'Repaso en 3 días',
   'Repaso en 1 semana',
@@ -43,6 +46,10 @@ function confirmReset() {
         <span class="metric__value">{{ startedCount }}</span>
         <span class="metric__label">empezadas</span>
       </div>
+      <div class="metric">
+        <span class="metric__value">{{ dayStreak }}</span>
+        <span class="metric__label">{{ dayStreak === 1 ? 'día seguido' : 'días seguidos' }}</span>
+      </div>
     </div>
 
     <h2 class="heading">Dónde están tus {{ total }} palabras</h2>
@@ -63,9 +70,11 @@ function confirmReset() {
     <h2 class="heading">Palabras que más te cuestan</h2>
     <div class="hardest scrollable">
       <div v-for="entry in hardestWords" :key="entry.word" class="hard-row">
-        <span class="hard-row__word">{{ entry.word }}</span>
+        <span class="hard-row__word" lang="en">{{ entry.word }}</span>
         <span class="hard-row__meaning">{{ MEANINGS[entry.word] }}</span>
-        <span class="hard-row__fails">{{ entry.wrong }} fallo(s)</span>
+        <span class="hard-row__fails">
+          {{ entry.wrong }} {{ entry.wrong === 1 ? 'fallo' : 'fallos' }}
+        </span>
       </div>
       <p v-if="!hardestWords.length" class="empty">
         Aún no has fallado ninguna. Aparecerán aquí cuando pase.
@@ -79,7 +88,7 @@ function confirmReset() {
 <style scoped>
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
   gap: 8px;
   margin-bottom: 22px;
 }

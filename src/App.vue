@@ -25,6 +25,7 @@ const session = ref({ seen: 0, right: 0 })
 
 const {
   queue,
+  attempt,
   currentWord,
   storageAvailable,
   boxOf,
@@ -36,6 +37,8 @@ const {
   masteredCount,
   startedCount,
   accuracy,
+  dayStreak,
+  dueCount,
   boxCounts,
   hardestWords,
 } = useSpacedRepetition()
@@ -45,8 +48,8 @@ onMounted(() => {
   buildQueue()
 })
 
-function onGraded(wasRight) {
-  grade(currentWord.value, wasRight)
+function onGraded(wasRight, usedHint) {
+  grade(currentWord.value, wasRight, usedHint)
   session.value = {
     seen: session.value.seen + 1,
     right: session.value.right + (wasRight ? 1 : 0),
@@ -100,7 +103,7 @@ const totalWords = ALL_WORDS.length
 
         <StudyCard
           v-if="currentWord"
-          :key="currentWord"
+          :key="`${currentWord}#${attempt}`"
           :word="currentWord"
           :mode="mode"
           @graded="onGraded"
@@ -115,7 +118,7 @@ const totalWords = ALL_WORDS.length
         <div class="session">
           <span>En la tanda: {{ queue.length }}</span>
           <span>Sesión: {{ session.right }}/{{ session.seen }}</span>
-          <span>Dominadas: {{ masteredCount }}</span>
+          <span>Vencidas: {{ dueCount }}</span>
         </div>
 
         <p v-if="!storageAvailable" class="warning">
@@ -128,6 +131,7 @@ const totalWords = ALL_WORDS.length
         :mastered-count="masteredCount"
         :started-count="startedCount"
         :accuracy="accuracy"
+        :day-streak="dayStreak"
         :box-counts="boxCounts"
         :hardest-words="hardestWords"
         @reset="onReset"

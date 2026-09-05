@@ -10,8 +10,9 @@ export const MASTER_BOX = 5
 export const BATCH_SIZE = 20
 
 const STORAGE_KEY = 'memoriza-wordle:v1'
+const DAY_MS = 86_400_000
 
-const emptyStats = () => ({ answered: 0, correct: 0, lastDay: null, dayStreak: 0 })
+const emptyStats = () => ({ answered: 0, correct: 0, hinted: 0, lastDay: null, dayStreak: 0 })
 
 function shuffle(list) {
   const copy = [...list]
@@ -22,8 +23,13 @@ function shuffle(list) {
   return copy
 }
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10)
+const dayKey = (date = new Date()) => date.toISOString().slice(0, 10)
+
+/** True si `previous` es el día calendario inmediatamente anterior a `today`. */
+function isConsecutiveDay(previous, today) {
+  if (!previous) return false
+  const gap = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${previous}T00:00:00Z`)
+  return gap === DAY_MS
 }
 
 /**
@@ -37,16 +43,36 @@ export function useSpacedRepetition() {
   const queue = ref([])
   const storageAvailable = ref(true)
 
+  /**
+   * Contador monótono de tarjetas mostradas. Se usa como parte de la `key` de
+   * StudyCard: si una palabra fallada vuelve a quedar al frente de la cola, la
+   * palabra no cambia pero el intento sí, y el remontaje sigue ocurriendo.
+   */
+  const attempt = ref(0)
+
   function load() {
+    let saved = null
     try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        progress.value = parsed.progress ?? {}
-        stats.value = { ...emptyStats(), ...(parsed.stats ?? {}) }
-      }
+      saved = localStorage.getItem(STORAGE_KEY)
     } catch {
+      // El navegador bloquea el almacenamiento (modo privado, permisos, etc.).
       storageAvailable.value = false
+      return
+    }
+    if (!saved) return
+
+    try {
+      const parsed = JSON.parse(saved)
+      progress.value = parsed.progress ?? {}
+      stats.value = { ...emptyStats(), ...(parsed.stats ?? {}) }
+    } catch {
+      // Datos corruptos: el almacenamiento funciona, lo guardado no.
+      // Se descarta y se empieza limpio en vez de quedar sin poder guardar.
+      try {
+        localStorage.removeItem(STORAGE_KEY)
+      } catch {
+        storageAvailable.value = false
+      }
     }
   }
 
@@ -102,10 +128,19 @@ export function useSpacedRepetition() {
 
   const currentWord = computed(() => queue.value[0] ?? null)
 
-  /** Registra el resultado y reprograma la palabra según su nueva caja. */
-  function grade(word, wasRight) {
+  /**
+   * Registra el resultado y reprograma la palabra según su nueva caja.
+   *
+   * Acertar con pista no sube de caja: la respuesta salió de la muleta, no de la
+   * memoria. Mantiene la caja actual y la reprograma para volver a aparecer.
+   */
+  function grade(word, wasRight, usedHint = false) {
     const previous = progress.value[word] ?? { box: 0, right: 0, wrong: 0 }
-    const nextBox = wasRight ? Math.min(MASTER_BOX, previous.box + 1) : 0
+
+    let nextBox
+    if (!wasRight) nextBox = 0
+    else if (usedHint) nextBox = previous.box
+    else nextBox = Math.min(MASTER_BOX, previous.box + 1)
 
     progress.value = {
       ...progress.value,
@@ -117,13 +152,20 @@ export function useSpacedRepetition() {
       },
     }
 
-    const day = todayKey()
-    const isNewDay = stats.value.lastDay !== day
+    const today = dayKey()
+    const previousDay = stats.value.lastDay
+    let dayStreak = stats.value.dayStreak
+    if (previousDay !== today) {
+      // Racha real: solo sigue si el día anterior también hubo estudio.
+      dayStreak = isConsecutiveDay(previousDay, today) ? dayStreak + 1 : 1
+    }
+
     stats.value = {
       answered: stats.value.answered + 1,
       correct: stats.value.correct + (wasRight ? 1 : 0),
-      lastDay: day,
-      dayStreak: isNewDay ? stats.value.dayStreak + 1 : Math.max(1, stats.value.dayStreak),
+      hinted: stats.value.hinted + (wasRight && usedHint ? 1 : 0),
+      lastDay: today,
+      dayStreak,
     }
   }
 
@@ -134,6 +176,8 @@ export function useSpacedRepetition() {
   function advance(wasRight) {
     const [head, ...rest] = queue.value
     if (!head) return
+
+    attempt.value += 1
 
     if (wasRight && boxOf(head) >= 1) {
       if (rest.length) queue.value = rest
@@ -149,6 +193,7 @@ export function useSpacedRepetition() {
   function reset() {
     progress.value = {}
     stats.value = emptyStats()
+    attempt.value = 0
     buildQueue()
     try {
       localStorage.removeItem(STORAGE_KEY)
@@ -162,6 +207,16 @@ export function useSpacedRepetition() {
   const accuracy = computed(() =>
     stats.value.answered ? Math.round((stats.value.correct / stats.value.answered) * 100) : 0,
   )
+  const dayStreak = computed(() => stats.value.dayStreak)
+
+  /** Cuántas palabras están vencidas ahora mismo, más allá de la tanda actual. */
+  const dueCount = computed(() => {
+    const now = Date.now()
+    return ALL_WORDS.filter((w) => {
+      const entry = progress.value[w]
+      return entry && entry.box < MASTER_BOX && entry.due <= now
+    }).length
+  })
 
   const boxCounts = computed(() => {
     const counts = Array(BOX_INTERVALS.length).fill(0)
@@ -184,6 +239,7 @@ export function useSpacedRepetition() {
     progress,
     stats,
     queue,
+    attempt,
     currentWord,
     storageAvailable,
     boxOf,
@@ -195,6 +251,8 @@ export function useSpacedRepetition() {
     masteredCount,
     startedCount,
     accuracy,
+    dayStreak,
+    dueCount,
     boxCounts,
     hardestWords,
   }

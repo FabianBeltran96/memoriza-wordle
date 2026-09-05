@@ -17,8 +17,18 @@ const hasFilters = computed(
 
 const onlyLetters = (value) => value.replace(/[^a-zA-Z]/g, '').toUpperCase()
 
+/**
+ * Limpia el texto y lo devuelve al input. Sin ese eco, un carácter descartado
+ * deja `value` igual, Vue no re-renderiza y el DOM sigue mostrando lo inválido.
+ */
+function sanitize(event, limit = Infinity) {
+  const clean = onlyLetters(event.target.value).slice(0, limit)
+  if (event.target.value !== clean) event.target.value = clean
+  return clean
+}
+
 function setGreen(index, event) {
-  greens.value[index] = onlyLetters(event.target.value).slice(0, 1)
+  greens.value[index] = sanitize(event, 1)
 }
 
 /** Filtra el banco con las mismas reglas del Wordle: verdes, amarillas y grises. */
@@ -42,6 +52,9 @@ const matches = computed(() => {
     return true
   })
 })
+
+const RESULT_LIMIT = 200
+const visibleMatches = computed(() => matches.value.slice(0, RESULT_LIMIT))
 
 const maxFrequency = LETTER_FREQUENCY[0]?.[1] ?? 1
 
@@ -68,6 +81,11 @@ function clearFilters() {
         :class="{ 'green-box--set': letter }"
         type="text"
         maxlength="1"
+        inputmode="latin"
+        autocapitalize="characters"
+        autocorrect="off"
+        spellcheck="false"
+        :aria-label="`Letra verde en la posición ${i + 1}`"
         :value="letter"
         @input="setGreen(i, $event)"
       />
@@ -81,7 +99,12 @@ function clearFilters() {
           type="text"
           :value="yellows"
           placeholder="ej. AER"
-          @input="yellows = onlyLetters($event.target.value)"
+          inputmode="latin"
+          autocapitalize="characters"
+          autocorrect="off"
+          spellcheck="false"
+          aria-label="Letras amarillas: están en la palabra, pero no en esa posición"
+          @input="yellows = sanitize($event)"
         />
       </div>
       <div class="filter">
@@ -91,27 +114,37 @@ function clearFilters() {
           type="text"
           :value="grays"
           placeholder="ej. STON"
-          @input="grays = onlyLetters($event.target.value)"
+          inputmode="latin"
+          autocapitalize="characters"
+          autocorrect="off"
+          spellcheck="false"
+          aria-label="Letras grises: descartadas, no están en la palabra"
+          @input="grays = sanitize($event)"
         />
       </div>
     </div>
 
     <div class="results-head">
-      <span>{{ matches.length }} palabra(s) encajan</span>
+      <span aria-live="polite">
+        {{ matches.length }} {{ matches.length === 1 ? 'palabra encaja' : 'palabras encajan' }}
+      </span>
       <button v-if="hasFilters" class="link" @click="clearFilters">limpiar filtros</button>
     </div>
 
     <div class="results scrollable">
       <div
-        v-for="word in matches.slice(0, 200)"
+        v-for="word in visibleMatches"
         :key="word"
         class="result"
         :class="{ 'result--mastered': props.boxOf(word) >= MASTER_BOX }"
       >
-        <span class="result__word">{{ word }}</span>
+        <span class="result__word" lang="en">{{ word }}</span>
         <span class="result__meaning">{{ MEANINGS[word] }}</span>
       </div>
       <p v-if="!matches.length" class="empty">Ninguna palabra del banco cumple esas pistas.</p>
+      <p v-else-if="matches.length > RESULT_LIMIT" class="empty">
+        Mostrando las primeras {{ RESULT_LIMIT }}. Agrega más pistas para acortar la lista.
+      </p>
     </div>
 
     <h2 class="heading">Letras más frecuentes del banco</h2>

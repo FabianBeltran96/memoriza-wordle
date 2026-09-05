@@ -9,12 +9,16 @@ const props = defineProps({
 
 const emit = defineEmits(['graded', 'next'])
 
+/** Orden en que las pistas van descubriendo casillas: primera, última, centro. */
+const HINT_ORDER = [0, 4, 2]
+const MAX_HINTS = 2
+
 const answer = ref('')
 const verdict = ref(null) // null | 'correcto' | 'incorrecto' | 'rendido'
-const hintLevel = ref(0)
+const hinted = ref([]) // posiciones descubiertas con el botón "Pista"
 const cardMode = ref('traduccion')
 const scrambled = ref('')
-const revealedPositions = ref([])
+const revealedPositions = ref([]) // posiciones que el modo "patron" regala de entrada
 const inputEl = ref(null)
 
 const meaning = computed(() => MEANINGS[props.word])
@@ -47,7 +51,7 @@ function setupCard() {
 
   answer.value = ''
   verdict.value = null
-  hintLevel.value = 0
+  hinted.value = []
 
   nextTick(() => inputEl.value?.focus())
 }
@@ -60,15 +64,27 @@ const prompt = computed(() => {
   return `Completa la palabra: “${meaning.value}”`
 })
 
+/** Siguiente casilla que descubriría una pista, o null si ya no quedan. */
+const nextHint = computed(() => {
+  if (hinted.value.length >= MAX_HINTS) return null
+  const taken = [...revealedPositions.value, ...hinted.value]
+  return HINT_ORDER.find((i) => !taken.includes(i)) ?? null
+})
+
+const canHint = computed(() => nextHint.value !== null && !verdict.value)
+
+/** Acertar con pista no cuenta como dominio: la respuesta salió de la muleta. */
+const usedHint = computed(() => hinted.value.length > 0)
+
 /** Estado visual de cada casilla, en orden. */
 const tiles = computed(() =>
   [0, 1, 2, 3, 4].map((i) => {
     if (verdict.value) {
       return { letter: props.word[i], state: verdict.value === 'correcto' ? 'correcto' : 'malo' }
     }
-    const shownByPattern = revealedPositions.value.includes(i)
-    const shownByHint = (hintLevel.value >= 1 && i === 0) || (hintLevel.value >= 2 && i === 4)
-    if (shownByPattern || shownByHint) return { letter: props.word[i], state: 'pista' }
+    if (revealedPositions.value.includes(i) || hinted.value.includes(i)) {
+      return { letter: props.word[i], state: 'pista' }
+    }
     const typed = answer.value[i]
     return { letter: typed ?? '', state: typed ? 'escrita' : 'vacia' }
   }),
@@ -76,21 +92,36 @@ const tiles = computed(() =>
 
 const canSubmit = computed(() => answer.value.length === 5 && !verdict.value)
 
+/**
+ * Normaliza a mayúsculas sin símbolos. Escribe el valor limpio de vuelta en el
+ * input: si el carácter tecleado se descarta, `answer` no cambia, Vue no
+ * re-renderiza y el DOM se quedaría mostrando la basura que el modelo ya rechazó.
+ */
 function onInput(event) {
-  answer.value = event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)
+  const clean = event.target.value
+    .replace(/[^a-zA-Z]/g, '')
+    .toUpperCase()
+    .slice(0, 5)
+  answer.value = clean
+  if (event.target.value !== clean) event.target.value = clean
+}
+
+function takeHint() {
+  if (!canHint.value) return
+  hinted.value = [...hinted.value, nextHint.value]
 }
 
 function submit() {
   if (!canSubmit.value) return
   const wasRight = answer.value === props.word
   verdict.value = wasRight ? 'correcto' : 'incorrecto'
-  emit('graded', wasRight)
+  emit('graded', wasRight, usedHint.value)
 }
 
 function giveUp() {
   if (verdict.value) return
   verdict.value = 'rendido'
-  emit('graded', false)
+  emit('graded', false, usedHint.value)
 }
 
 function goNext() {
@@ -116,7 +147,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       <template v-else>{{ prompt }}</template>
     </p>
 
-    <p v-if="cardMode === 'anagrama' && !verdict" class="scrambled">{{ scrambled }}</p>
+    <p v-if="cardMode === 'anagrama' && !verdict" class="scrambled" lang="en">{{ scrambled }}</p>
 
     <div class="tiles">
       <div
@@ -130,12 +161,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       </div>
     </div>
 
-    <div v-if="verdict" class="reveal">
+    <div v-if="verdict" class="reveal" role="status" aria-live="polite">
       <p class="reveal__word">
-        <strong>{{ word }}</strong> — {{ meaning }}
+        <strong lang="en">{{ word }}</strong> — {{ meaning }}
       </p>
       <p v-if="verdict !== 'correcto' && answer && answer !== word" class="reveal__typed">
         Escribiste: {{ answer }}
+      </p>
+      <p v-else-if="verdict === 'correcto' && usedHint" class="reveal__typed">
+        Con pista: no sube de caja, la vas a volver a ver.
       </p>
       <button class="btn btn--dark" @click="goNext">Siguiente</button>
       <p class="hint-text">o presiona Enter</p>
@@ -148,16 +182,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         type="text"
         :value="answer"
         maxlength="5"
+        inputmode="latin"
         autocomplete="off"
+        autocapitalize="characters"
+        autocorrect="off"
         spellcheck="false"
+        enterkeyhint="go"
+        aria-label="Tu respuesta, cinco letras"
         placeholder="escribe la palabra"
         @input="onInput"
       />
       <div class="actions">
         <button class="btn btn--go" :disabled="!canSubmit" @click="submit">Comprobar</button>
-        <button class="btn btn--ghost" :disabled="hintLevel >= 2" @click="hintLevel++">
-          Pista
-        </button>
+        <button class="btn btn--ghost" :disabled="!canHint" @click="takeHint">Pista</button>
         <button class="btn btn--ghost" @click="giveUp">No sé</button>
       </div>
     </template>
